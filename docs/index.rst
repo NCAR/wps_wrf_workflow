@@ -26,7 +26,7 @@ following steps:
 
 The typical way to run the workflow is to execute this command:
 
-.. code::
+.. code-block:: python
 
    ./setup_wps_wrf.py -b [cycle start date in YYYYMMDD_HH format] -c [/relative/path/to/wps_wrf_config.yaml]
 
@@ -38,7 +38,7 @@ WPS/WRF namelists.
 
 A full usage statement with additional options can be seen by executing:
 
-.. code::
+.. code-block:: python
 
    ./setup_wps_wrf.py -h
 

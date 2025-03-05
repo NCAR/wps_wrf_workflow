@@ -1,0 +1,19 @@
+#!/bin/bash
+
+#PBS -N real
+#PBS -q main
+#PBS -l select=1:ncpus=128:mpiprocs=128
+#PBS -l walltime=0:20:00
+#PBS -l job_priority=regular
+#PBS -j oe
+#PBS -A NWSA0002
+
+# Use scratch for temporary files to avoid space limits in /tmp
+export TMPDIR=/glade/derecho/scratch/$USER/temp
+mkdir -p $TMPDIR
+
+module list
+
+touch REAL_BEG
+mpiexec -n 128 ./real.exe
+touch REAL_END

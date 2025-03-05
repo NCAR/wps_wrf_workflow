@@ -1,0 +1,18 @@
+#!/bin/bash
+
+#PBS -N metgrid
+#PBS -q casper@casper-pbs
+#PBS -l select=1:ncpus=16:mpiprocs=16
+#PBS -l walltime=0:20:00
+#PBS -A NWSA0002
+
+# Use scratch for temporary files to avoid space limits in /tmp
+export TMPDIR=/glade/derecho/scratch/$USER/temp
+mkdir -p $TMPDIR
+
+module load openmpi
+module list
+
+touch METGRID_BEG
+mpirun -n 16 ./metgrid.exe
+touch METGRID_END

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+#PBS -N geogrid
+#PBS -q casper
+#PBS -l select=1:ncpus=4:mpiprocs=4
+#PBS -l walltime=0:30:00
+#PBS -A NWSA0002
+
+module load openmpi
+module list
+
+touch GEOGRID_BEG
+mpirun -n 4 ./geogrid.exe
+touch GEOGRID_END

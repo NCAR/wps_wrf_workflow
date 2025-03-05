@@ -1,0 +1,20 @@
+#!/bin/bash
+
+#PBS -N wrf
+#PBS -q main@desched1
+#PBS -l select=3:ncpus=128:mpiprocs=128
+#PBS -l walltime=12:00:00
+#PBS -l job_priority=regular
+#PBS -j oe
+#PBS -A NWSA0002
+
+# Use scratch for temporary files to avoid space limits in /tmp
+export TMPDIR=/glade/derecho/scratch/$USER/temp
+mkdir -p $TMPDIR
+
+module list
+
+touch WRF_BEG
+mpiexec -n 384 ./wrf.exe
+touch WRF_END
+

@@ -1,0 +1,38 @@
+&share
+ wrf_core = 'ARW',
+ max_dom = 1,
+ start_date = "2024-11-12_00:00:00",
+ end_date   = '2024-11-13_06:00:00',
+ interval_seconds = 3600,
+! io_form_geogrid = 2,
+/
+
+&geogrid
+ parent_id         =   1,
+ parent_grid_ratio =   1,
+ i_parent_start    =   1,
+ j_parent_start    =   1,
+ e_we              = 340,
+ e_sn              = 340,
+ geog_data_res = 'usgs_lakes+default','usgs_lakes+default',
+ dx = 1000.0,
+ dy = 1000.0,
+ map_proj = 'lambert',
+ ref_lat   =  40.59546,
+ ref_lon   = -105.14000,
+ truelat1  =  40.59546,
+ truelat2  =  40.59546,
+ stand_lon = -105.14000,
+ geog_data_path = '/glade/work/wrfhelp/WPS_GEOG'
+/
+
+&ungrib
+ out_format = 'WPS',
+ prefix = 'FILE',
+/
+
+&metgrid
+ fg_name = 'FILE'
+! process_only_bdy = 10,
+ constants_name = 'TAVGSFC'
+/

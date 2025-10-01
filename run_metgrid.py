@@ -51,6 +51,10 @@ def parse_args():
                         help='If flag present, then use HRRR native-grid data for atmospheric variables and pressure-level data for soil variables, otherwise only use HRRR pressure-level data for all variables')
     parser.add_argument('-g', '--use_tavgsfc', action='store_true',
                         help='If flag present, then ensure metgrid uses TAVGSFC file from avg_tsfc.exe utility')
+    parser.add_argument('-d', '--geos5_int_dir', default=None,
+                        help='string or pathlib.Path object of the directory with GEOS-5 Intermediate Format files')
+    parser.add_argument('-f', '--use_geos5_aer_fcst', action='store_true',
+                        help='If flag present, then use time-varying aerosol inputs from GEOS-5 forecasts')
 
     args = parser.parse_args()
     cycle_dt_beg = args.cycle_dt_beg
@@ -66,6 +70,8 @@ def parse_args():
     hostname = args.hostname
     hrrr_native = args.hrrr_native
     use_tavgsfc = args.use_tavgsfc
+    geos5_int_dir = args.geos5_int_dir
+    use_geos5_aer_fcst = args.use_geos5_aer_fcst
 
     if len(cycle_dt_beg) != 11 or cycle_dt_beg[8] != '_':
         log.error('ERROR! Incorrect format for argument cycle_dt_beg in call to run_metgrid.py. Exiting!')
@@ -107,10 +113,10 @@ def parse_args():
         nml_tmp = 'namelist.wps.'+icbc_model.lower()
 
     return (cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, ungrib_dir, tmp_dir, icbc_model, nml_tmp, scheduler,
-            hostname, hrrr_native, use_tavgsfc)
+            hostname, hrrr_native, use_tavgsfc, geos5_int_dir, use_geos5_aer_fcst)
 
 def main(cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, ungrib_dir, tmp_dir, icbc_model, nml_tmp, scheduler,
-         hostname, hrrr_native, use_tavgsfc):
+         hostname, hrrr_native, use_tavgsfc, geos5_int_dir, use_geos5_aer_fcst):
 
     log.info(f'Running run_metgrid.py from directory: {curr_dir}')
 
@@ -177,24 +183,38 @@ def main(cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, ungrib_dir, tmp_dir, 
             if line.strip()[0:10] == 'start_date':
                 out_file.write(" start_date = '"+beg_dt_wrf+"', '"+beg_dt_wrf+"', '"+beg_dt_wrf+"',\n")
             elif line.strip()[0:8] == 'end_date':
-                out_file.write(" end_date   = '"+end_dt_wrf+"', '"+beg_dt_wrf+"', '"+beg_dt_wrf+"',\n")
+                if use_geos5_aer_fcst:
+                    # For time-varying aerosols we need metgrid files for child domains all the way through to end time
+                    out_file.write(f" end_date   = '{end_dt_wrf}', '{end_dt_wrf}', '{end_dt_wrf}',\n")
+                else:
+                    out_file.write(f" end_date   = '{end_dt_wrf}', '{beg_dt_wrf}', '{beg_dt_wrf}',\n")
             elif line.strip()[0:7] == 'fg_name':
                 if icbc_model in variants_gfs:
-                    out_file.write(" fg_name = '"+str(ungrib_dir)+"/GFS',\n")
+                    line_text = f" fg_name = '{ungrib_dir}/GFS',"
+                    # out_file.write(" fg_name = '"+str(ungrib_dir)+"/GFS',\n")
                 elif icbc_model in variants_gfs_fnl:
-                    out_file.write(" fg_name = '" + str(ungrib_dir) + "/GFS_FNL',\n")
+                    line_text = f" fg_name = '{ungrib_dir}/GFS_FNL',"
+                    # out_file.write(" fg_name = '" + str(ungrib_dir) + "/GFS_FNL',\n")
                 elif icbc_model in variants_gefs:
-                    out_file.write(" fg_name = '"+str(ungrib_dir)+"/GEFS_B','"+str(ungrib_dir)+"/GEFS_A',\n")
+                    line_text = f" fg_name = '{ungrib_dir}/GEFS_B','{ungrib_dir}/GEFS_A',"
+                    # out_file.write(" fg_name = '"+str(ungrib_dir)+"/GEFS_B','"+str(ungrib_dir)+"/GEFS_A',\n")
                 elif icbc_model in variants_hrrr:
                     if hrrr_native:
                         # If using native-grid HRRR output for atmos vars, then also need to have soil vars from pres
-                        out_file.write(" fg_name = '" + str(ungrib_dir) + "/HRRR_hybr','" +
-                                       str(ungrib_dir) + "/HRRR_soil',\n")
+                        line_text = f" fg_name = '{ungrib_dir}/HRRR_hybr','{ungrib_dir}/HRRR_soil',"
+                        # out_file.write(" fg_name = '" + str(ungrib_dir) + "/HRRR_hybr','" +
+                        #                str(ungrib_dir) + "/HRRR_soil',\n")
                     else:
                         # Otherwise, just use pressure-level HRRR output for both atmospheric & soil variables
-                        out_file.write(" fg_name = '" + str(ungrib_dir) + "/HRRR_pres',\n")
+                        line_text = f" fg_name = '{ungrib_dir}/HRRR_pres',"
+                        # out_file.write(" fg_name = '" + str(ungrib_dir) + "/HRRR_pres',\n")
                 else:
-                    out_file.write(" fg_name = '" + str(ungrib_dir) + "/FILE',\n")
+                    line_text = f" fg_name = '{ungrib_dir}/FILE',"
+                    # out_file.write(" fg_name = '" + str(ungrib_dir) + "/FILE',\n")
+                if use_geos5_aer_fcst:
+                    line_text = line_text + f"'{geos5_int_dir}/GEOS',"
+                out_file.write(line_text + '\n')
+
             elif line.strip()[0:28] == 'opt_output_from_metgrid_path':
                 out_file.write(" opt_output_from_metgrid_path = '"+str(out_dir)+"',\n")
             elif line.strip()[0:8] == '&metgrid' and not constants_name:
@@ -287,9 +307,9 @@ def main(cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, ungrib_dir, tmp_dir, 
 if __name__ == '__main__':
     now_time_beg = dt.datetime.now(dt.UTC)
     (cycle_dt, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, tmp_dir, icbc_model, nml_tmp, scheduler, hostname,
-     hrrr_native, use_tavgsfc) = parse_args()
+     hrrr_native, use_tavgsfc, geos5_int_dir, use_geos5_aer_fcst) = parse_args()
     main(cycle_dt, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, tmp_dir, icbc_model, nml_tmp, scheduler, hostname,
-         hrrr_native, use_tavgsfc)
+         hrrr_native, use_tavgsfc, geos5_int_dir, use_geos5_aer_fcst)
     now_time_end = dt.datetime.now(dt.UTC)
     run_time_tot = now_time_end - now_time_beg
     now_time_beg_str = now_time_beg.strftime('%Y-%m-%d %H:%M:%S')

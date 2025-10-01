@@ -44,7 +44,9 @@ def parse_args():
      'icbc_source': 'string specifying the repository from which to obtain ICs/LBCs (GLADE, AWS, GoogleCloud, NOMADS) (default: GLADE)',
      'icbc_analysis': 'flag to use analysis [f00] files for ICs/LBCs instead of forecasts from a single cycle (default: False)',
      'hrrr_native': 'flag to download HRRR native-grid atmospheric data for ICs/LBCs (default: True)',
-     'grib_dir': 'string or Path object specifying the parent directory for where grib/grib2 input data (e.g., GEFS, GFS, etc.) is downloaded for use by ungrib (default: /glade/derecho/scratch/jaredlee/data',
+     'grib_dir': 'string or Path object specifying the parent directory for where grib/grib2 input data (e.g., GEFS, GFS, etc.) is downloaded for use by ungrib (default: /glade/derecho/scratch/jaredlee/data)',
+     'geos5_int_dir': 'string or Path object specifying the parent directory for where GEOS-5 aerosol data in WPS Intermediate Format is stored (default: None)',
+     'use_geos5_aer_fcst': 'flag to use time-varying aerosol data from GEOS-5 forecasts (default: False)',
      'ungrib_domain': 'string (either "full" or "subset") indicating whether to run ungrib on full-domain or geographically-subsetted grib/grib2 files (default: full)',
      'wps_ins_dir': 'string or Path object specifying the WPS installation directory (default: /glade/u/home/jaredlee/programs/WPS-4.6-dmpar)',
      'wrf_ins_dir': 'string or Path object specifying the WRF installation directory (default: /glade/u/home/jaredlee/programs/WRF-4.6)',
@@ -136,6 +138,9 @@ def parse_args():
     params.setdefault('do_wrf', False)
     params.setdefault('do_upp', False)
 
+    params.setdefault('geos5_int_dir', None)
+    params.setdefault('use_geos5_aer_fcst', False)
+
     params['hostname'] = hostname
     params['grib_dir_parent'] = pathlib.Path(params['grib_dir'])
     del params['grib_dir']
@@ -156,6 +161,11 @@ def parse_args():
     params['upp_working_dir'] = pathlib.Path(params['upp_working_dir'])
     params['upp_yaml'] = pathlib.Path(params['upp_yaml'])
     params['archive'] = params['archive']
+    if params['geos5_int_dir'] is not None:
+        params['geos5_int_dir_parent'] = pathlib.Path(params['geos5_int_dir'])
+    else:
+        params['geos5_int_dir_parent'] = None
+    del params['geos5_int_dir']
 
     # Check upp_domains and convert to int if possible.
     for idx, domain in enumerate(params['upp_domains']):
@@ -174,6 +184,7 @@ def parse_args():
 def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, exp_name, realtime, archive, hostname,
          icbc_model, icbc_source, icbc_analysis, ungrib_domain, grib_dir_parent, wps_ins_dir, wrf_ins_dir, hrrr_native,
          wps_run_dir_parent, wrf_run_dir_parent, template_dir, arc_dir_parent,
+         geos5_int_dir_parent, use_geos5_aer_fcst,
          upp_working_dir, upp_yaml, upp_domains,
          get_icbc, do_geogrid, do_ungrib, do_avg_tsfc, use_tavgsfc, do_metgrid, do_real, do_wrf, do_upp):
 
@@ -348,6 +359,53 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         end_dy = end_dt.strftime('%d')
         end_hr = end_dt.strftime('%H')
 
+        # If using GEOS-5 time-varying aerosols, set the actual directory here where the WPS Int. Fmt. data is
+        if use_geos5_aer_fcst:
+            # First, make sure a parent directory has been specified
+            if geos5_int_dir_parent is None:
+                log.error('ERROR: geos5_int_dir is not defined in the config yaml file. \n'
+                          'Please specify the parent directory where the GEOS-5 time-varying aerosols in '
+                          'WPS Intermediate Format are stored (the output of geos2wrf). \nExiting!')
+                sys.exit(1)
+
+            # If using GEOS-5 forecasts (not analyses)...
+            if use_geos5_aer_fcst:
+                # Assume for now that we're using data from the most recent 00 or 12 UTC time
+                # GEOS-5 has two main cycles daily, 00 UTC out to 10 days, 12 UTC out to 5 days
+                # Also check for simulation length to ensure GEOS-5 forecasts are able to be used before we get going
+                if sim_hrs > 240:
+                    log.error('ERROR: Requested sim_hrs > 240 and use_geos5_aer_fcst = True. \n'
+                              'These are incompatible options, as the longest GEOS-5 forecast goes out 240 h. Exiting!')
+                    sys.exit(1)
+                elif sim_hrs > 120:
+                    # First, the easy case
+                    # Use icbc_cycle_dt as the reference, assuming we don't want newer GEOS-5 than atmospheric data
+                    if icbc_cycle_hr == '00':
+                        geos5_cycle_dt = cycle_dt
+                    else:
+                        # If it's any other time, then just go back to the last 00 UTC
+                        geos5_cycle_dt = cycle_dt - dt.timedelta(hours=int(icbc_cycle_hr))
+                else:
+                    if icbc_cycle_hr == '00' or icbc_cycle_hr == '12':
+                        geos5_cycle_dt = cycle_dt
+                    else:
+                        # If it's any other time, then just go back to the last 00 or 12 UTC
+                        if int(icbc_cycle_hr) < 12:
+                            geos5_cycle_dt = cycle_dt - dt.timedelta(hours=int(icbc_cycle_hr))
+                        else:
+                            geos5_cycle_dt = cycle_dt - dt.timedelta(hours=int(icbc_cycle_hr) + 12)
+
+                geos5_cycle_dt_str = geos5_cycle_dt.strftime(fmt_yyyymmdd_hh)
+                geos5_cycle_yr = geos5_cycle_dt.strftime('%Y')
+                geos5_cycle_mo = geos5_cycle_dt.strftime('%m')
+                geos5_cycle_dy = geos5_cycle_dt.strftime('%d')
+                geos5_cycle_hr = geos5_cycle_dt.strftime('%H')
+                log.info(f'Attempting to use GEOS-5 forecast cycle {geos5_cycle_dt_str} for time-varying aerosols')
+
+                # Assume the GEOS-5 data is stored in a directory structure that mimics that of NASA
+                geos5_int_dir = geos5_int_dir_parent.joinpath(f'Y{geos5_cycle_yr}', f'M{geos5_cycle_mo}',
+                                                              f'D{geos5_cycle_dy}', f'H{geos5_cycle_hr}')
+
         ## ***********
         ## WPS Section
         ## ***********
@@ -498,6 +556,10 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
                 cmd_list.append('-v')
             if use_tavgsfc:
                 cmd_list.append('-g')
+            if use_geos5_aer_fcst:
+                cmd_list.append('-f')
+                cmd_list.append('-d')
+                cmd_list.append(geos5_int_dir)
             ret, output = exec_command(cmd_list, log)
 
         if do_real:

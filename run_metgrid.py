@@ -53,8 +53,8 @@ def parse_args():
                         help='If flag present, then ensure metgrid uses TAVGSFC file from avg_tsfc.exe utility')
     parser.add_argument('-d', '--geos5_int_dir', default=None,
                         help='string or pathlib.Path object of the directory with GEOS-5 Intermediate Format files')
-    parser.add_argument('-f', '--use_geos5_aer_fcst', action='store_true',
-                        help='If flag present, then use time-varying aerosol inputs from GEOS-5 forecasts')
+    parser.add_argument('-f', '--use_geos5_aero', action='store_true',
+                        help='If flag present, then use time-varying aerosol inputs from GEOS-5 forecasts or analyses')
 
     args = parser.parse_args()
     cycle_dt_beg = args.cycle_dt_beg
@@ -71,7 +71,7 @@ def parse_args():
     hrrr_native = args.hrrr_native
     use_tavgsfc = args.use_tavgsfc
     geos5_int_dir = args.geos5_int_dir
-    use_geos5_aer_fcst = args.use_geos5_aer_fcst
+    use_geos5_aero = args.use_geos5_aero
 
     if len(cycle_dt_beg) != 11 or cycle_dt_beg[8] != '_':
         log.error('ERROR! Incorrect format for argument cycle_dt_beg in call to run_metgrid.py. Exiting!')
@@ -113,10 +113,10 @@ def parse_args():
         nml_tmp = 'namelist.wps.'+icbc_model.lower()
 
     return (cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, ungrib_dir, tmp_dir, icbc_model, nml_tmp, scheduler,
-            hostname, hrrr_native, use_tavgsfc, geos5_int_dir, use_geos5_aer_fcst)
+            hostname, hrrr_native, use_tavgsfc, geos5_int_dir, use_geos5_aero)
 
 def main(cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, ungrib_dir, tmp_dir, icbc_model, nml_tmp, scheduler,
-         hostname, hrrr_native, use_tavgsfc, geos5_int_dir, use_geos5_aer_fcst):
+         hostname, hrrr_native, use_tavgsfc, geos5_int_dir, use_geos5_aero):
 
     log.info(f'Running run_metgrid.py from directory: {curr_dir}')
 
@@ -183,7 +183,7 @@ def main(cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, ungrib_dir, tmp_dir, 
             if line.strip()[0:10] == 'start_date':
                 out_file.write(" start_date = '"+beg_dt_wrf+"', '"+beg_dt_wrf+"', '"+beg_dt_wrf+"',\n")
             elif line.strip()[0:8] == 'end_date':
-                if use_geos5_aer_fcst:
+                if use_geos5_aero:
                     # For time-varying aerosols we need metgrid files for child domains all the way through to end time
                     out_file.write(f" end_date   = '{end_dt_wrf}', '{end_dt_wrf}', '{end_dt_wrf}',\n")
                 else:
@@ -211,7 +211,7 @@ def main(cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, ungrib_dir, tmp_dir, 
                 else:
                     line_text = f" fg_name = '{ungrib_dir}/FILE',"
                     # out_file.write(" fg_name = '" + str(ungrib_dir) + "/FILE',\n")
-                if use_geos5_aer_fcst:
+                if use_geos5_aero:
                     line_text = line_text + f"'{geos5_int_dir}/GEOS',"
                 out_file.write(line_text + '\n')
 

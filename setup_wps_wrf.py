@@ -25,6 +25,8 @@ import glob
 import socket
 from argparse import RawTextHelpFormatter
 
+from pandas.io.common import file_path_to_url
+
 from proc_util import exec_command
 
 this_file = os.path.basename(__file__)
@@ -47,6 +49,7 @@ def parse_args():
      'grib_dir': 'string or Path object specifying the parent directory for where grib/grib2 input data (e.g., GEFS, GFS, etc.) is downloaded for use by ungrib (default: /glade/derecho/scratch/jaredlee/data)',
      'geos5_int_dir': 'string or Path object specifying the parent directory for where GEOS-5 aerosol data in WPS Intermediate Format is stored (default: None)',
      'use_geos5_aer_fcst': 'flag to use time-varying aerosol data from GEOS-5 forecasts (default: False)',
+     'use_geos5_aer_anal': 'flag to use time-varying aerosol data from GEOS-5 analyses (default: False)',
      'ungrib_domain': 'string (either "full" or "subset") indicating whether to run ungrib on full-domain or geographically-subsetted grib/grib2 files (default: full)',
      'wps_ins_dir': 'string or Path object specifying the WPS installation directory (default: /glade/u/home/jaredlee/programs/WPS-4.6-dmpar)',
      'wrf_ins_dir': 'string or Path object specifying the WRF installation directory (default: /glade/u/home/jaredlee/programs/WRF-4.6)',
@@ -140,6 +143,7 @@ def parse_args():
 
     params.setdefault('geos5_int_dir', None)
     params.setdefault('use_geos5_aer_fcst', False)
+    params.setdefault('use_geos5_aer_anal', False)
 
     params['hostname'] = hostname
     params['grib_dir_parent'] = pathlib.Path(params['grib_dir'])
@@ -184,12 +188,12 @@ def parse_args():
 def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, exp_name, realtime, archive, hostname,
          icbc_model, icbc_source, icbc_analysis, ungrib_domain, grib_dir_parent, wps_ins_dir, wrf_ins_dir, hrrr_native,
          wps_run_dir_parent, wrf_run_dir_parent, template_dir, arc_dir_parent,
-         geos5_int_dir_parent, use_geos5_aer_fcst,
+         geos5_int_dir_parent, use_geos5_aer_fcst, use_geos5_aer_anal,
          upp_working_dir, upp_yaml, upp_domains,
          get_icbc, do_geogrid, do_ungrib, do_avg_tsfc, use_tavgsfc, do_metgrid, do_real, do_wrf, do_upp):
 
     ## String format statements
-    fmt_exp_dir        = '%Y-%m-%d_%H'
+    fmt_int_fmt_date        = '%Y-%m-%d_%H'
     fmt_yyyymmdd       = '%Y%m%d'
     fmt_yyyymmddhh     = '%Y%m%d%H'
     fmt_yyyymmdd_hh    = '%Y%m%d_%H'
@@ -360,7 +364,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         end_hr = end_dt.strftime('%H')
 
         # If using GEOS-5 time-varying aerosols, set the actual directory here where the WPS Int. Fmt. data is
-        if use_geos5_aer_fcst:
+        if use_geos5_aer_fcst or use_geos5_aer_anal:
             # First, make sure a parent directory has been specified
             if geos5_int_dir_parent is None:
                 log.error('ERROR: geos5_int_dir is not defined in the config yaml file. \n'
@@ -400,11 +404,67 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
                 geos5_cycle_mo = geos5_cycle_dt.strftime('%m')
                 geos5_cycle_dy = geos5_cycle_dt.strftime('%d')
                 geos5_cycle_hr = geos5_cycle_dt.strftime('%H')
-                log.info(f'Attempting to use GEOS-5 forecast cycle {geos5_cycle_dt_str} for time-varying aerosols')
+                log.info(f'Linking to GEOS-5 forecast cycle {geos5_cycle_dt_str} for time-varying aerosols '
+                         f'in {ungrib_dir}')
+
+                # To match the approach for GEOS-5 analyses below, link to GEOS-5 files from the ungrib dir
+                ungrib_dir.mkdir(parents=True, exist_ok=True)
 
                 # Assume the GEOS-5 data is stored in a directory structure that mimics that of NASA
                 geos5_int_dir = geos5_int_dir_parent.joinpath(f'Y{geos5_cycle_yr}', f'M{geos5_cycle_mo}',
                                                               f'D{geos5_cycle_dy}', f'H{geos5_cycle_hr}')
+
+                # Use glob to find the matching file name patterns
+                for geos5_int_file in sorted(geos5_int_dir.glob(f'GEOS:*')):
+                    # Symlink path
+                    geos5_symlink = ungrib_dir.joinpath(geos5_int_file.name)
+                    # Create the symlink, deleting an existing file if necessary
+                    if geos5_symlink.exists(): geos5_symlink.unlink()
+                    geos5_symlink.symlink_to(geos5_int_file)
+
+            # If using GEOS-5 analyses (not forecasts)...
+            if use_geos5_aer_anal:
+                # Create a directory in which there will be symlinks to each of the requested GEOS-5 Int. Fmt. files
+                # To avoid unnecessary clutter in non-scratch storage, put it in the wps/ungrib run directory
+                ungrib_dir.mkdir(parents=True, exist_ok=True)
+
+                # Now symlink to each requested GEOS-5 Intermediate Format file
+                # Start with the simplest cases, assuming a cycle_hr of 00, 03, 06, 09, 12, 15, 18, or 21
+                # NOTE: This all assumes model cycle times starting at 00 minutes, rather than a non-top-of-hour time
+                if cycle_hr in ['00', '03', '06', '09', '12', '15', '18', '21']:
+                    # Go an extra 3 hours in case of, say, an 8-h simulation, to ensure aerosols are available
+                    geos5_dt = pd.date_range(start=cycle_dt, end=cycle_dt + dt.timedelta(hours=sim_hrs + 3), freq='3h')
+
+                # Now do 1 hour after a 3-hourly time
+                elif cycle_hr in ['01', '04', '07', '10', '13', '16', '19', '22']:
+                    # Ensure there are GEOS-5 files bookending the simulation times
+                    geos5_dt = pd.date_range(start=cycle_dt - dt.timedelta(hours=1),
+                                             end=cycle_dt + dt.timedelta(hours=sim_hrs + 2), freq='3h')
+
+                # What's left is [02, 05, 08, 11, 14, 17, 20, 23]
+                else:
+                    # Ensure there are GEOS-5 files bookending the simulation times
+                    geos5_dt = pd.date_range(start=cycle_dt - dt.timedelta(hours=2),
+                                             end=cycle_dt + dt.timedelta(hours= sim_hrs + 1), freq='3h')
+
+                # Now make symlinks to all the required GEOS-5 intermediate format files
+                log.info(f'Linking to GEOS-5 analysis intermediate format files for time-varying aerosols '
+                         f'in {ungrib_dir}')
+                for tt in range(len(geos5_dt)):
+                    this_geos5_date_str = geos5_dt[tt].strftime(fmt_int_fmt_date)
+                    this_geos5_yr = geos5_dt[tt].strftime('%Y')
+                    this_geos5_mo = geos5_dt[tt].strftime('%m')
+                    this_geos5_dy = geos5_dt[tt].strftime('%d')
+                    this_geos5_int_dir = geos5_int_dir_parent.joinpath(f'Y{this_geos5_yr}', f'M{this_geos5_mo}',
+                                                                       f'D{this_geos5_dy}')
+                    # Target path
+                    geos5_file = this_geos5_int_dir.joinpath(f'GEOS:{this_geos5_date_str}')
+                    # Symlink path
+                    geos5_symlink = ungrib_dir.joinpath(f'GEOS:{this_geos5_date_str}')
+                    # Now create the symlink, deleting an existing symlink if necessary
+                    if geos5_symlink.exists(): geos5_symlink.unlink()
+                    geos5_symlink.symlink_to(geos5_file)
+
 
         ## ***********
         ## WPS Section
@@ -556,10 +616,10 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
                 cmd_list.append('-v')
             if use_tavgsfc:
                 cmd_list.append('-g')
-            if use_geos5_aer_fcst:
+            if use_geos5_aer_fcst or use_geos5_aer_anal:
                 cmd_list.append('-f')
                 cmd_list.append('-d')
-                cmd_list.append(geos5_int_dir)
+                cmd_list.append(ungrib_dir)
             ret, output = exec_command(cmd_list, log)
 
         if do_real:

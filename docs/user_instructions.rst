@@ -183,7 +183,115 @@ Main YAML Configuration
 
 All other fields can remain at their default values unless specialized
 cases arise.
-   
+
+
+Using Time-Varying (GEOS-5) or Climatological Aerosols with mp_phys=28
+----------------------------------------------------------------------
+This section provides some brief instructions for users who wish to use the Thompson-Eidhammer
+aerosol-aware microphysics scheme in WRF (:code:`mp_phys=28`), whether with climatological
+aerosols or with time-varying aerosols from GEOS-5. These instructions presume the user is
+using WRF 4.4+, which is when the GEOS-5 and black carbon aerosol capabilities were added.
+These instructions are intended to complement helpful information already posted at
+https://www2.mmm.ucar.edu/wrf/users/physics/mp28_updated_new.html and at
+https://github.com/wrf-model/WRF/pull/1616.
+
+**1. Thompson-Eidhammer climatological aerosol**
+
+The workflow does not require any special variables to be set in the config yaml file.
+The only settings to choose this option would come in the template WPS & WRF namelists.
+
+* In :code:`namelist.wps`, set this in the template namelist (assuming Derecho/Casper):
+
+::
+
+   &metgrid
+     constants_name = '/glade/work/wrfhelp/WPS_files/QNWFA_QNIFA_QNBCA_SIGMA_MONTHLY.dat',
+
+* In :code:`namelist.input`, ensure you have these settings in the template namelist:
+
+::
+
+   &time_control
+     [any options for auxinput15 or auxinput17 should be commented or removed]
+
+   &domains
+     wif_input_opt     = 2,
+     num_wif_levels    = 30,
+
+   &physics
+     mp_physics        = 28, 28, 28,
+     aer_opt           = 3,
+     use_aero_icbc     = .true.,
+     use_rap_aero_icbc = .false.,
+     wif_fire_emit     = .false.,
+     qna_update        = 0,
+
+**2. GEOS-5 time-varying aerosols**
+
+Using this option presumes that the :code:`geos2wrf` software has already been utilized to
+process GEOS-5 global files (which are in NetCDF from NASA) into regional files in WPS
+Intermediate Format, with the variables that are expected to be found by Metgrid, Real, and WRF,
+as detailed in: https://github.com/wrf-model/WRF/pull/1616. A link to the :code:`geos2wrf`
+Github repository will be posted here after that repo becomes publicly available.
+
+There are some settings in the config yaml file that are required, but first, these are the
+settings in the template WPS & WRF namelists that should be set prior to running the workflow:
+
+* In :code:`namelist.wps`, set something like this in the template namelist:
+
+::
+
+   &metgrid
+     fg_name = '/glade/derecho/scratch/jaredlee/ipc/wps/20170301_00/ungrib/GFS_FNL',’/glade/derecho/scratch/jaredlee/ipc/wps/20170301_00/ungrib/GEOS',
+
+
+Note the user should **not** supply :code:`QNWFA_QNIFA_QNBCA_SIGMA_MONTHLY.dat` in
+:code:`constants_name` when using GEOS-5 aerosols, as that file is for the aerosol climatology.
+
+* In :code:`namelist.input`, ensure you have these settings in the template namelist:
+
+::
+
+   &time_control
+     [any options for auxinput15 commented or deleted]
+     auxinput17_inname     = "wrfqnainp_d0*",
+     auxinput17_interval_m = 180, 180, 180,
+     io_form_auxinput17    = 2,
+
+   &domains
+     wif_input_opt     = 2,
+     num_wif_levels    = 72,
+
+   &physics
+     mp_physics        = 28, 28, 28,
+     aer_opt           = 3,
+     use_aero_icbc     = .false.,
+     use_rap_aero_icbc = .true.,
+     wif_fire_emit     = .true.,
+     qna_update        = 1,
+
+
+* In addition, these options in the config yaml file need to be considered:
+
+  *  :code:`use_geos5_aero_fcst`: :code:`True` to use time-varying aerosol data from
+     GEOS-5 forecasts in Metgrid, for use with the Thompson-Eidhammer aerosol-aware
+     microphysics scheme in WRF v4.4+ (:code:`mp_phys=28`). These GEOS-5 data files
+     must already be in WPS Intermediate Format. This option will add the appropriate
+     line/entry to the :code:`&metgrid` section of :code:`namelist.wps` if it does not
+     already exist. (Default value: :code:`False`.)
+
+  *  :code:`use_geos5_aero_anal`: :code:`True` to use time-varying aerosol data from
+     GEOS-5 analyses in Metgrid, for use with the Thompson-Eidhammer aerosol-aware
+     microphysics scheme in WRF v4.4+ (:code:`mp_phys=28`). These GEOS-5 data files
+     must already be in WPS Intermediate Format. This option will add the appropriate
+     line/entry to the :code:`&metgrid` section of :code:`namelist.wps` if it does not
+     already exist. (Default value: :code:`False`.)
+
+  *  :code:`geos5_int_dir`: String specifying the path of the parent directory where
+     the GEOS-5 time-varying aerosol data in WPS Intermediate Format are stored. This
+     option is only used if :code:`use_geos5_aero_fcst` or :code:`use_geos5_aero_anal`
+     are set to :code:`True`. (Default value: :code:`None`.)
+
 
 Edit Template Files
 -------------------

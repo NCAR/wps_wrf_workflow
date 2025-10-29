@@ -269,7 +269,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         ungrib_dir  = wps_run_dir.joinpath('ungrib')
         metgrid_dir = wps_run_dir.joinpath('metgrid')
         ## WPS & WRF namelist templates
-        wps_nml_tmp = 'namelist.wps.'+icbc_model.lower()
+        wps_nml_tmp = f'namelist.wps.{icbc_model.lower()}'
         if exp_name is None:
             wrf_nml_tmp = 'namelist.input.' + icbc_model.lower()
             if icbc_model in variants_hrrr:
@@ -292,7 +292,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
             # Don't bother looking for .hybr or .pres suffixes or anything like that.
             # If using experiments driven by different models for ICs/LBCs, name templates carefully (e.g.,
             # namelist.input.hrrr.mem01, namelist.input.gfs.mem02, etc.) & run workflow separately for each icbc_model.
-            wrf_nml_tmp = 'namelist.input.' + icbc_model.lower() + '.'+exp_name
+            wrf_nml_tmp = f'namelist.input.{icbc_model.lower()}.{exp_name}'
 
             # As above, handle use of HRRR (hybr or pres) when using an exp_name
             if icbc_model in variants_hrrr:
@@ -303,17 +303,26 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
                 if template_dir.joinpath(wrf_nml_tmp_hrrr).exists():
                     wrf_nml_tmp = wrf_nml_tmp_hrrr
 
+            # Set the WPS namelist template file to look for an experiment-specific one if needed for WPS
+            if not exp_wrf_only:
+                wps_nml_tmp = f'{wps_nml_tmp}.{exp_name}'
+
         # Add some error-checking for the existence of the expected WPS & WRF namelist templates
         if not template_dir.joinpath(wps_nml_tmp).exists():
             log.error('ERROR: Expected WPS namelist template file ' + str(
                 template_dir.joinpath(wps_nml_tmp)) + ' does not exist.')
             log.error('Exiting!')
             sys.exit(1)
+        else:
+            log.info(f'Using WPS namelist template file: {template_dir.joinpath(wps_nml_tmp)}')
+
         if not template_dir.joinpath(wrf_nml_tmp).exists():
             log.error('ERROR: Expected WRF namelist template file ' + str(
                 template_dir.joinpath(wrf_nml_tmp)) + ' does not exist.')
             log.error('Exiting!')
             sys.exit(1)
+        else:
+            log.info(f'Using WRF namelist template file: {template_dir.joinpath(wrf_nml_tmp)}')
 
         ## Get the icbc model cycle
         ## In real-time applications there may need to be an offset to stay ahead of the clock
@@ -485,8 +494,8 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         ## ***********
 
         ## Read the template namelist.wps to get interval_seconds, and convert to int_hrs
-        nml_tmp = template_dir.joinpath('namelist.wps.'+icbc_model.lower())
-        log.info('Opening '+str(nml_tmp))
+        nml_tmp = template_dir.joinpath(wps_nml_tmp)
+        log.info(f'Opening {nml_tmp}')
         with open(nml_tmp) as nml:
             for line in nml:
                 if line.strip()[0:16] == 'interval_seconds':

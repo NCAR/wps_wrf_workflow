@@ -269,7 +269,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         ungrib_dir  = wps_run_dir.joinpath('ungrib')
         metgrid_dir = wps_run_dir.joinpath('metgrid')
         ## WPS & WRF namelist templates
-        wps_nml_tmp = 'namelist.wps.'+icbc_model.lower()
+        wps_nml_tmp = f'namelist.wps.{icbc_model.lower()}'
         if exp_name is None:
             wrf_nml_tmp = 'namelist.input.' + icbc_model.lower()
             if icbc_model in variants_hrrr:
@@ -292,7 +292,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
             # Don't bother looking for .hybr or .pres suffixes or anything like that.
             # If using experiments driven by different models for ICs/LBCs, name templates carefully (e.g.,
             # namelist.input.hrrr.mem01, namelist.input.gfs.mem02, etc.) & run workflow separately for each icbc_model.
-            wrf_nml_tmp = 'namelist.input.' + icbc_model.lower() + '.'+exp_name
+            wrf_nml_tmp = f'namelist.input.{icbc_model.lower()}.{exp_name}'
 
             # As above, handle use of HRRR (hybr or pres) when using an exp_name
             if icbc_model in variants_hrrr:
@@ -303,17 +303,26 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
                 if template_dir.joinpath(wrf_nml_tmp_hrrr).exists():
                     wrf_nml_tmp = wrf_nml_tmp_hrrr
 
+            # Set the WPS namelist template file to look for an experiment-specific one if needed for WPS
+            if not exp_wrf_only:
+                wps_nml_tmp = f'{wps_nml_tmp}.{exp_name}'
+
         # Add some error-checking for the existence of the expected WPS & WRF namelist templates
         if not template_dir.joinpath(wps_nml_tmp).exists():
             log.error('ERROR: Expected WPS namelist template file ' + str(
                 template_dir.joinpath(wps_nml_tmp)) + ' does not exist.')
             log.error('Exiting!')
             sys.exit(1)
+        else:
+            log.info(f'Using WPS namelist template file: {template_dir.joinpath(wps_nml_tmp)}')
+
         if not template_dir.joinpath(wrf_nml_tmp).exists():
             log.error('ERROR: Expected WRF namelist template file ' + str(
                 template_dir.joinpath(wrf_nml_tmp)) + ' does not exist.')
             log.error('Exiting!')
             sys.exit(1)
+        else:
+            log.info(f'Using WRF namelist template file: {template_dir.joinpath(wrf_nml_tmp)}')
 
         ## Get the icbc model cycle
         ## In real-time applications there may need to be an offset to stay ahead of the clock
@@ -485,8 +494,8 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         ## ***********
 
         ## Read the template namelist.wps to get interval_seconds, and convert to int_hrs
-        nml_tmp = template_dir.joinpath('namelist.wps.'+icbc_model.lower())
-        log.info('Opening '+str(nml_tmp))
+        nml_tmp = template_dir.joinpath(wps_nml_tmp)
+        log.info(f'Opening {nml_tmp}')
         with open(nml_tmp) as nml:
             for line in nml:
                 if line.strip()[0:16] == 'interval_seconds':
@@ -592,7 +601,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
 
         if do_ungrib:
             cmd_list = ['python', 'run_ungrib.py', '-b', cycle_str, '-s', str(sim_hrs), '-w', wps_ins_dir,
-                        '-r', wps_run_dir, '-o', ungrib_dir, '-t', template_dir, '-m', icbc_model,
+                        '-r', wps_run_dir, '-o', ungrib_dir, '-t', template_dir, '-m', icbc_model, '-n', wps_nml_tmp,
                         '-i', str(int_hrs), '-q', scheduler, '-f', str(icbc_fc_dt), '-a', hostname, '-c', icbc_source]
 
             # For some IC/LBC models the gribfiles are stored in date directories, not cycle hour directories
@@ -609,13 +618,13 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
             if hrrr_native:
                 cmd_list.append('-v')
             if mem_id is not None:
-                cmd_list.append('-n')
+                cmd_list.append('-d')
                 cmd_list.append(mem_id)
             ret, output = exec_command(cmd_list, log)
 
         if do_avg_tsfc:
             cmd_list = ['python', 'run_avg_tsfc.py', '-b', cycle_str, '-s', str(sim_hrs), '-w', wps_ins_dir,
-                        '-r', wps_run_dir, '-u', ungrib_dir, '-t', template_dir, '-m', icbc_model]
+                        '-r', wps_run_dir, '-u', ungrib_dir, '-t', template_dir, '-m', icbc_model, '-n', wps_nml_tmp]
             if hrrr_native:
                 cmd_list.append('-v')
             ret, output = exec_command(cmd_list, log)
@@ -625,7 +634,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         if do_metgrid:
             cmd_list = ['python', 'run_metgrid.py', '-b', cycle_str, '-s', str(sim_hrs), '-w', wps_ins_dir,
                         '-r', wps_run_dir, '-o', metgrid_dir, '-u', ungrib_dir, '-t', template_dir, '-m', icbc_model,
-                        '-q', scheduler, '-a', hostname]
+                        '-q', scheduler, '-a', hostname, '-n', wps_nml_tmp]
             if hrrr_native:
                 cmd_list.append('-v')
             if use_tavgsfc:

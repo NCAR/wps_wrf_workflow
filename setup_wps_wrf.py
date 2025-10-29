@@ -386,109 +386,6 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         end_dy = end_dt.strftime('%d')
         end_hr = end_dt.strftime('%H')
 
-        # If using GEOS-5 time-varying aerosols, set the actual directory here where the WPS Int. Fmt. data is
-        if use_geos5_aer_fcst or use_geos5_aer_anal:
-            # First, make sure a parent directory has been specified
-            if geos5_int_dir_parent is None:
-                log.error('ERROR: geos5_int_dir is not defined in the config yaml file. \n'
-                          'Please specify the parent directory where the GEOS-5 time-varying aerosols in '
-                          'WPS Intermediate Format are stored (the output of geos2wrf). \nExiting!')
-                sys.exit(1)
-
-            # If using GEOS-5 forecasts (not analyses)...
-            if use_geos5_aer_fcst:
-                # Assume for now that we're using data from the most recent 00 or 12 UTC time
-                # GEOS-5 has two main cycles daily, 00 UTC out to 10 days, 12 UTC out to 5 days
-                # Also check for simulation length to ensure GEOS-5 forecasts are able to be used before we get going
-                if sim_hrs > 240:
-                    log.error('ERROR: Requested sim_hrs > 240 and use_geos5_aer_fcst = True. \n'
-                              'These are incompatible options, as the longest GEOS-5 forecast goes out 240 h. Exiting!')
-                    sys.exit(1)
-                elif sim_hrs > 120:
-                    # First, the easy case
-                    # Use icbc_cycle_dt as the reference, assuming we don't want newer GEOS-5 than atmospheric data
-                    if icbc_cycle_hr == '00':
-                        geos5_cycle_dt = cycle_dt
-                    else:
-                        # If it's any other time, then just go back to the last 00 UTC
-                        geos5_cycle_dt = cycle_dt - dt.timedelta(hours=int(icbc_cycle_hr))
-                else:
-                    if icbc_cycle_hr == '00' or icbc_cycle_hr == '12':
-                        geos5_cycle_dt = cycle_dt
-                    else:
-                        # If it's any other time, then just go back to the last 00 or 12 UTC
-                        if int(icbc_cycle_hr) < 12:
-                            geos5_cycle_dt = cycle_dt - dt.timedelta(hours=int(icbc_cycle_hr))
-                        else:
-                            geos5_cycle_dt = cycle_dt - dt.timedelta(hours=int(icbc_cycle_hr) + 12)
-
-                geos5_cycle_dt_str = geos5_cycle_dt.strftime(fmt_yyyymmdd_hh)
-                geos5_cycle_yr = geos5_cycle_dt.strftime('%Y')
-                geos5_cycle_mo = geos5_cycle_dt.strftime('%m')
-                geos5_cycle_dy = geos5_cycle_dt.strftime('%d')
-                geos5_cycle_hr = geos5_cycle_dt.strftime('%H')
-                log.info(f'Linking to GEOS-5 forecast cycle {geos5_cycle_dt_str} for time-varying aerosols '
-                         f'in {ungrib_dir}')
-
-                # To match the approach for GEOS-5 analyses below, link to GEOS-5 files from the ungrib dir
-                ungrib_dir.mkdir(parents=True, exist_ok=True)
-
-                # Assume the GEOS-5 data is stored in a directory structure that mimics that of NASA
-                geos5_int_dir = geos5_int_dir_parent.joinpath(f'Y{geos5_cycle_yr}', f'M{geos5_cycle_mo}',
-                                                              f'D{geos5_cycle_dy}', f'H{geos5_cycle_hr}')
-
-                # Use glob to find the matching file name patterns
-                for geos5_int_file in sorted(geos5_int_dir.glob(f'GEOS:*')):
-                    # Symlink path
-                    geos5_symlink = ungrib_dir.joinpath(geos5_int_file.name)
-                    # Create the symlink, deleting an existing file if necessary
-                    if geos5_symlink.exists(): geos5_symlink.unlink()
-                    geos5_symlink.symlink_to(geos5_int_file)
-
-            # If using GEOS-5 analyses (not forecasts)...
-            if use_geos5_aer_anal:
-                # Create a directory in which there will be symlinks to each of the requested GEOS-5 Int. Fmt. files
-                # To avoid unnecessary clutter in non-scratch storage, put it in the wps/ungrib run directory
-                ungrib_dir.mkdir(parents=True, exist_ok=True)
-
-                # Now symlink to each requested GEOS-5 Intermediate Format file
-                # Start with the simplest cases, assuming a cycle_hr of 00, 03, 06, 09, 12, 15, 18, or 21
-                # NOTE: This all assumes model cycle times starting at 00 minutes, rather than a non-top-of-hour time
-                if cycle_hr in ['00', '03', '06', '09', '12', '15', '18', '21']:
-                    # Go an extra 3 hours in case of, say, an 8-h simulation, to ensure aerosols are available
-                    geos5_dt = pd.date_range(start=cycle_dt, end=cycle_dt + dt.timedelta(hours=sim_hrs + 3), freq='3h')
-
-                # Now do 1 hour after a 3-hourly time
-                elif cycle_hr in ['01', '04', '07', '10', '13', '16', '19', '22']:
-                    # Ensure there are GEOS-5 files bookending the simulation times
-                    geos5_dt = pd.date_range(start=cycle_dt - dt.timedelta(hours=1),
-                                             end=cycle_dt + dt.timedelta(hours=sim_hrs + 2), freq='3h')
-
-                # What's left is [02, 05, 08, 11, 14, 17, 20, 23]
-                else:
-                    # Ensure there are GEOS-5 files bookending the simulation times
-                    geos5_dt = pd.date_range(start=cycle_dt - dt.timedelta(hours=2),
-                                             end=cycle_dt + dt.timedelta(hours= sim_hrs + 1), freq='3h')
-
-                # Now make symlinks to all the required GEOS-5 intermediate format files
-                log.info(f'Linking to GEOS-5 analysis intermediate format files for time-varying aerosols '
-                         f'in {ungrib_dir}')
-                for tt in range(len(geos5_dt)):
-                    this_geos5_date_str = geos5_dt[tt].strftime(fmt_int_fmt_date)
-                    this_geos5_yr = geos5_dt[tt].strftime('%Y')
-                    this_geos5_mo = geos5_dt[tt].strftime('%m')
-                    this_geos5_dy = geos5_dt[tt].strftime('%d')
-                    this_geos5_int_dir = geos5_int_dir_parent.joinpath(f'Y{this_geos5_yr}', f'M{this_geos5_mo}',
-                                                                       f'D{this_geos5_dy}')
-                    # Target path
-                    geos5_file = this_geos5_int_dir.joinpath(f'GEOS:{this_geos5_date_str}')
-                    # Symlink path
-                    geos5_symlink = ungrib_dir.joinpath(f'GEOS:{this_geos5_date_str}')
-                    # Now create the symlink, deleting an existing symlink if necessary
-                    if geos5_symlink.exists(): geos5_symlink.unlink()
-                    geos5_symlink.symlink_to(geos5_file)
-
-
         ## ***********
         ## WPS Section
         ## ***********
@@ -630,6 +527,106 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
             ret, output = exec_command(cmd_list, log)
             # If we just ran avg_tsfc.exe, then we'll want to use TAVGSFC when running metgrid
             use_tavgsfc = True
+
+        # If using GEOS-5 time-varying aerosols, set the actual directory here where the WPS Int. Fmt. data is
+        if use_geos5_aer_fcst or use_geos5_aer_anal:
+            # First, make sure a parent directory has been specified
+            if geos5_int_dir_parent is None:
+                log.error('ERROR: geos5_int_dir is not defined in the config yaml file. \n'
+                          'Please specify the parent directory where the GEOS-5 time-varying aerosols in '
+                          'WPS Intermediate Format are stored (the output of geos2wrf). \nExiting!')
+                sys.exit(1)
+
+            # Create a directory in which there will be symlinks to each of the requested GEOS-5 Int. Fmt. files
+            # To avoid unnecessary clutter in non-scratch storage, put it in the wps/ungrib run directory
+            # It should already exist, but make sure it does just in case
+            ungrib_dir.mkdir(parents=True, exist_ok=True)
+
+            # If using GEOS-5 forecasts (not analyses)...
+            if use_geos5_aer_fcst:
+                # Assume for now that we're using data from the most recent 00 or 12 UTC time
+                # GEOS-5 has two main cycles daily, 00 UTC out to 10 days, 12 UTC out to 5 days
+                # Also check for simulation length to ensure GEOS-5 forecasts are able to be used before we get going
+                if sim_hrs > 240:
+                    log.error('ERROR: Requested sim_hrs > 240 and use_geos5_aer_fcst = True. \n'
+                              'These are incompatible options, as the longest GEOS-5 forecast goes out 240 h. Exiting!')
+                    sys.exit(1)
+                elif sim_hrs > 120:
+                    # First, the easy case
+                    # Use icbc_cycle_dt as the reference, assuming we don't want newer GEOS-5 than atmospheric data
+                    if icbc_cycle_hr == '00':
+                        geos5_cycle_dt = cycle_dt
+                    else:
+                        # If it's any other time, then just go back to the last 00 UTC
+                        geos5_cycle_dt = cycle_dt - dt.timedelta(hours=int(icbc_cycle_hr))
+                else:
+                    if icbc_cycle_hr == '00' or icbc_cycle_hr == '12':
+                        geos5_cycle_dt = cycle_dt
+                    else:
+                        # If it's any other time, then just go back to the last 00 or 12 UTC
+                        if int(icbc_cycle_hr) < 12:
+                            geos5_cycle_dt = cycle_dt - dt.timedelta(hours=int(icbc_cycle_hr))
+                        else:
+                            geos5_cycle_dt = cycle_dt - dt.timedelta(hours=int(icbc_cycle_hr) + 12)
+
+                geos5_cycle_dt_str = geos5_cycle_dt.strftime(fmt_yyyymmdd_hh)
+                geos5_cycle_yr = geos5_cycle_dt.strftime('%Y')
+                geos5_cycle_mo = geos5_cycle_dt.strftime('%m')
+                geos5_cycle_dy = geos5_cycle_dt.strftime('%d')
+                geos5_cycle_hr = geos5_cycle_dt.strftime('%H')
+                log.info(f'Linking to GEOS-5 forecast cycle {geos5_cycle_dt_str} for time-varying aerosols '
+                         f'in {ungrib_dir}')
+
+                # Assume the GEOS-5 data is stored in a directory structure that mimics that of NASA
+                geos5_int_dir = geos5_int_dir_parent.joinpath(f'Y{geos5_cycle_yr}', f'M{geos5_cycle_mo}',
+                                                              f'D{geos5_cycle_dy}', f'H{geos5_cycle_hr}')
+
+                # Use glob to find the matching file name patterns
+                for geos5_int_file in sorted(geos5_int_dir.glob(f'GEOS:*')):
+                    # Symlink path
+                    geos5_symlink = ungrib_dir.joinpath(geos5_int_file.name)
+                    # Create the symlink, deleting an existing file if necessary
+                    if geos5_symlink.exists(): geos5_symlink.unlink()
+                    geos5_symlink.symlink_to(geos5_int_file)
+
+            # If using GEOS-5 analyses (not forecasts)...
+            if use_geos5_aer_anal:
+                # Now symlink to each requested GEOS-5 Intermediate Format file
+                # Start with the simplest cases, assuming a cycle_hr of 00, 03, 06, 09, 12, 15, 18, or 21
+                # NOTE: This all assumes model cycle times starting at 00 minutes, rather than a non-top-of-hour time
+                if cycle_hr in ['00', '03', '06', '09', '12', '15', '18', '21']:
+                    # Go an extra 3 hours in case of, say, an 8-h simulation, to ensure aerosols are available
+                    geos5_dt = pd.date_range(start=cycle_dt, end=cycle_dt + dt.timedelta(hours=sim_hrs + 3), freq='3h')
+
+                # Now do 1 hour after a 3-hourly time
+                elif cycle_hr in ['01', '04', '07', '10', '13', '16', '19', '22']:
+                    # Ensure there are GEOS-5 files bookending the simulation times
+                    geos5_dt = pd.date_range(start=cycle_dt - dt.timedelta(hours=1),
+                                             end=cycle_dt + dt.timedelta(hours=sim_hrs + 2), freq='3h')
+
+                # What's left is [02, 05, 08, 11, 14, 17, 20, 23]
+                else:
+                    # Ensure there are GEOS-5 files bookending the simulation times
+                    geos5_dt = pd.date_range(start=cycle_dt - dt.timedelta(hours=2),
+                                             end=cycle_dt + dt.timedelta(hours= sim_hrs + 1), freq='3h')
+
+                # Now make symlinks to all the required GEOS-5 intermediate format files
+                log.info(f'Linking to GEOS-5 analysis intermediate format files for time-varying aerosols '
+                         f'in {ungrib_dir}')
+                for tt in range(len(geos5_dt)):
+                    this_geos5_date_str = geos5_dt[tt].strftime(fmt_int_fmt_date)
+                    this_geos5_yr = geos5_dt[tt].strftime('%Y')
+                    this_geos5_mo = geos5_dt[tt].strftime('%m')
+                    this_geos5_dy = geos5_dt[tt].strftime('%d')
+                    this_geos5_int_dir = geos5_int_dir_parent.joinpath(f'Y{this_geos5_yr}', f'M{this_geos5_mo}',
+                                                                       f'D{this_geos5_dy}')
+                    # Target path
+                    geos5_file = this_geos5_int_dir.joinpath(f'GEOS:{this_geos5_date_str}')
+                    # Symlink path
+                    geos5_symlink = ungrib_dir.joinpath(f'GEOS:{this_geos5_date_str}')
+                    # Now create the symlink, deleting an existing symlink if necessary
+                    if geos5_symlink.exists(): geos5_symlink.unlink()
+                    geos5_symlink.symlink_to(geos5_file)
 
         if do_metgrid:
             cmd_list = ['python', 'run_metgrid.py', '-b', cycle_str, '-s', str(sim_hrs), '-w', wps_ins_dir,

@@ -217,11 +217,11 @@ def main(cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, ungrib_dir, tmp_dir, 
 
             elif line.strip()[0:28] == 'opt_output_from_metgrid_path':
                 out_file.write(" opt_output_from_metgrid_path = '"+str(out_dir)+"',\n")
-            elif line.strip()[0:8] == '&metgrid' and not constants_name:
+            elif line.strip()[0:8] == '&metgrid' and not constants_name and use_tavgsfc:
                 # Add a new line in the &metgrid section since we know from before that constants_name is not present
                 newline = line + " constants_name = '" + str(run_dir) + "/TAVGSFC',\n"
                 out_file.write(newline)
-            elif line.strip()[0:14] == 'constants_name':
+            elif line.strip()[0:14] == 'constants_name' and use_tavgsfc:
                 # Add TAVGSFC to the constants_name line if it isn't already included
                 index = line.find('TAVGSFC')
                 if index == -1:
@@ -229,6 +229,9 @@ def main(cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, ungrib_dir, tmp_dir, 
                     newline = line.split(sep='\n')[0]
                     newline += "'TAVGSFC',\n"
                     out_file.write(newline)
+                else:
+                    # If TAVGSFC is already there, then simply write out the whole line without modification
+                    out_file.write(line)
             else:
                 out_file.write(line)
 

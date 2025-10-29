@@ -49,12 +49,14 @@ def parse_args():
     parser.add_argument('-f', '--icbc_fc_dt', default=0, type=int, help='integer number of hours prior to WRF cycle time for IC/LBC model cycle (default: 0)')
     parser.add_argument('-i', '--int_hrs', default=3, type=int, help='integer number of hours between IC/LBC files (default: 3)')
     parser.add_argument('-q', '--scheduler', default='pbs', help='string specifying the cluster job scheduler (default: pbs)')
-    parser.add_argument('-n', '--mem_id', default=None, help='string specifying the numeric id (with any necessary leading zeros) of the GEFS or other ensemble member so that ./link_grib.csh can link to the correct file (default: None)')
+    parser.add_argument('-d', '--mem_id', default=None, help='string specifying the numeric id (with any necessary leading zeros) of the GEFS or other ensemble member so that ./link_grib.csh can link to the correct file (default: None)')
     parser.add_argument('-a', '--hostname', default='derecho', help='string specifying the hostname (default: derecho')
     parser.add_argument('-v', '--hrrr_native', action='store_true',
                         help='If flag present, then ungrib HRRR native-grid data for atmospheric variables and pressure-level data for soil variables, otherwise only ungrib HRRR pressure-level data for all variables')
     parser.add_argument('-l', '--icbc_analysis', action='store_true',
                         help='If flag present, use analysis [f00] files for ICs/LBCs')
+    parser.add_argument('-n', '--nml_tmp', default=None,
+                        help='string for filename of namelist template (default: namelist.wps.[icbc_model])')
 
     args = parser.parse_args()
     cycle_dt_beg = args.cycle_dt_beg
@@ -73,6 +75,7 @@ def parse_args():
     mem_id = args.mem_id
     hostname = args.hostname
     hrrr_native = args.hrrr_native
+    nml_tmp = args.nml_tmp
 
     if len(cycle_dt_beg) != 11 or cycle_dt_beg[8] != '_':
         log.error('ERROR! Incorrect format for argument cycle_dt_beg in call to run_metgrid.py. Exiting!')
@@ -110,10 +113,34 @@ def parse_args():
         sys.exit(1)
 
     return (cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, icbc_source, icbc_model, int_hrs,
-            icbc_fc_dt, scheduler, mem_id, hostname, hrrr_native, icbc_analysis)
+            icbc_fc_dt, scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp)
+
+
+def check_wps_nml_templates(template_dir: pathlib.Path, nml_list: list):
+    """Function to check if any potential options for the WPS template namelist for ungrib exist.
+    If one exists, it returns the file name of the one that does exist."""
+    nml_found = False
+    for nml in nml_list:
+        if nml is None: continue
+        if template_dir.joinpath(nml).exists():
+            wps_nml_tmp = temp_dir.joinpath(nml)
+            log.info(f'Using {wps_nml_tmp} as the template namelist for ungrib')
+            nml_found = True
+            break
+
+    if not nml_found:
+        log.error('ERROR: None of these template namelist files that were checked were found:')
+        for nml in nml_list:
+            if nml is None: continue
+            log.error(f'       {temp_dir.joinpath(nml)}')
+        log.error('Exiting!')
+        sys.exit(1)
+
+    return wps_nml_tmp
+
 
 def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, icbc_source, icbc_model, int_hrs,
-         icbc_fc_dt, scheduler, mem_id, hostname, hrrr_native, icbc_analysis):
+         icbc_fc_dt, scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp):
 
     log.info(f'Running run_ungrib.py from directory: {curr_dir}')
 
@@ -246,7 +273,9 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
                 log.error('ERROR: No option yet for icbc_source=' + icbc_source + ' for GFS in run_ungrib.py.')
                 log.error('Exiting!')
                 sys.exit(1)
-            shutil.copy(temp_dir.joinpath('namelist.wps.gfs'), 'namelist.wps.template')
+            nml_list = [nml_tmp, 'namelist.wps.gfs']
+            wps_nml_tmp = check_wps_nml_templates(temp_dir, nml_list)
+            shutil.copy(wps_nml_tmp, 'namelist.wps.template')
         elif icbc_model in variants_gfs_fnl:
             pathlib.Path('Vtable').symlink_to(wps_dir.joinpath('ungrib', 'Variable_Tables', 'Vtable.GFS'))
             if icbc_source in variants_glade:
@@ -269,11 +298,15 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
                 log.error('ERROR: No option yet for icbc_source=' + icbc_source + ' for GFS_FNL in run_ungrib.py.')
                 log.error('Exiting!')
                 sys.exit(1)
-            shutil.copy(temp_dir.joinpath('namelist.wps.gfs_fnl'), 'namelist.wps.template')
+            nml_list = [nml_tmp, 'namelist.wps.gfs_fnl']
+            wps_nml_tmp = check_wps_nml_templates(temp_dir, nml_list)
+            shutil.copy(wps_nml_tmp, 'namelist.wps.template')
         elif icbc_model in variants_gefs:
             pathlib.Path('Vtable').symlink_to(wps_dir.joinpath('ungrib','Variable_Tables','Vtable.GFSENS'))
             file_pattern = str(grib_dir) + '/pgrb2bp5/gep' + mem_id + '.t' + icbc_cycle_hr + 'z.pgrb2b.0p50.f' + lead_h_str3
-            shutil.copy(temp_dir.joinpath('namelist.wps.gefs_b'), 'namelist.wps.template')
+            nml_list = [nml_tmp, 'namelist.wps.gefs_b']
+            wps_nml_tmp = check_wps_nml_templates(temp_dir, nml_list)
+            shutil.copy(wps_nml_tmp, 'namelist.wps.template')
         elif icbc_model in variants_hrrr:
             if hrrr_native:
                 # Process native-grid HRRR output first, for atmospheric variables only (wrfnat files don't have soil)
@@ -282,6 +315,8 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
                 else:
                     file_pattern = str(grib_dir) + '/hrrr.t' + icbc_cycle_hr + 'z.wrfnatf' + lead_h_str2 + '.grib2'
                 pathlib.Path('Vtable').symlink_to(vtable_dir.joinpath('Vtable.raphrrr.hybr'))
+                nml_list = [nml_tmp, 'namelist.wps.hrrr_hybr', 'namelist.wps.hrrr']
+                wps_nml_tmp = check_wps_nml_templates(temp_dir, nml_list)
             else:
                 # Process pressure-grid HRRR output only, for both atmospheric & soil variables
                 if icbc_analysis:
@@ -289,7 +324,9 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
                 else:
                     file_pattern = str(grib_dir) + '/hrrr.t' + icbc_cycle_hr + 'z.wrfprsf' + lead_h_str2 + '.grib2'
                 pathlib.Path('Vtable').symlink_to(vtable_dir.joinpath('Vtable.raphrrr.pres'))
-            shutil.copy(temp_dir.joinpath('namelist.wps.hrrr'), 'namelist.wps.template')
+                nml_list = [nml_tmp, 'namelist.wps.hrrr_pres', 'namelist.wps.hrrr']
+                wps_nml_tmp = check_wps_nml_templates(temp_dir, nml_list)
+            shutil.copy(wps_nml_tmp, 'namelist.wps.template')
         else:
             log.error('ERROR: Unrecognized icbc_model in run_ungrib.py.')
             log.error('Exiting!')
@@ -513,7 +550,9 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
             if icbc_model in variants_gefs:
                 pathlib.Path('Vtable').symlink_to(wps_dir.joinpath('ungrib','Variable_Tables','Vtable.GFSENS'))
                 file_pattern = 'pgrb2ap5/gep' + mem_id + '.t' + icbc_cycle_hr + 'z.pgrb2a.0p50.f' + lead_h_str3
-                shutil.copy(temp_dir.joinpath('namelist.wps.gefs_a'), 'namelist.wps.template')
+                nml_list = [nml_tmp, 'namelist.wps.gefs_a']
+                wps_nml_tmp = check_wps_nml_templates(temp_dir, nml_list)
+                shutil.copy(wps_nml_tmp, 'namelist.wps.template')
             elif icbc_model in variants_hrrr:
                 vtable_soil = vtable_dir.joinpath('Vtable.raphrrr.soil_only')
                 if not vtable_soil.is_file():
@@ -526,7 +565,9 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
                     file_pattern = 'hrrr.t' + this_hh + 'z.wrfprsf00.grib2'
                 else:
                     file_pattern = 'hrrr.t' + icbc_cycle_hr + 'z.wrfprsf' + lead_h_str2 + '.grib2'
-                shutil.copy(temp_dir.joinpath('namelist.wps.hrrr'), 'namelist.wps.template')
+                nml_list = [nml_tmp, 'namelist.wps.hrrr.pres', 'namelist.wps.hrrr']
+                wps_nml_tmp = check_wps_nml_templates(temp_dir, nml_list)
+                shutil.copy(wps_nml_tmp, 'namelist.wps.template')
             else:
                 log.error('ERROR: Unknown icbc_model option in the second ungrib loop in run_ungrib.py.')
                 log.error('Exiting!')
@@ -655,9 +696,9 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
 if __name__ == '__main__':
     now_time_beg = dt.datetime.now(dt.UTC)
     (cycle_dt, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, icbc_source, icbc_model, int_hrs, icbc_fc_dt,
-     scheduler, mem_id, hostname, hrrr_native, icbc_analysis) = parse_args()
+     scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp) = parse_args()
     main(cycle_dt, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, icbc_source, icbc_model, int_hrs, icbc_fc_dt,
-         scheduler, mem_id, hostname, hrrr_native, icbc_analysis)
+         scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp)
     now_time_end = dt.datetime.now(dt.UTC)
     run_time_tot = now_time_end - now_time_beg
     now_time_beg_str = now_time_beg.strftime('%Y-%m-%d %H:%M:%S')

@@ -601,7 +601,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
 
         if do_ungrib:
             cmd_list = ['python', 'run_ungrib.py', '-b', cycle_str, '-s', str(sim_hrs), '-w', wps_ins_dir,
-                        '-r', wps_run_dir, '-o', ungrib_dir, '-t', template_dir, '-m', icbc_model,
+                        '-r', wps_run_dir, '-o', ungrib_dir, '-t', template_dir, '-m', icbc_model, '-n', wps_nml_tmp,
                         '-i', str(int_hrs), '-q', scheduler, '-f', str(icbc_fc_dt), '-a', hostname, '-c', icbc_source]
 
             # For some IC/LBC models the gribfiles are stored in date directories, not cycle hour directories
@@ -618,13 +618,13 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
             if hrrr_native:
                 cmd_list.append('-v')
             if mem_id is not None:
-                cmd_list.append('-n')
+                cmd_list.append('-d')
                 cmd_list.append(mem_id)
             ret, output = exec_command(cmd_list, log)
 
         if do_avg_tsfc:
             cmd_list = ['python', 'run_avg_tsfc.py', '-b', cycle_str, '-s', str(sim_hrs), '-w', wps_ins_dir,
-                        '-r', wps_run_dir, '-u', ungrib_dir, '-t', template_dir, '-m', icbc_model]
+                        '-r', wps_run_dir, '-u', ungrib_dir, '-t', template_dir, '-m', icbc_model, '-n', wps_nml_tmp]
             if hrrr_native:
                 cmd_list.append('-v')
             ret, output = exec_command(cmd_list, log)
@@ -634,7 +634,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         if do_metgrid:
             cmd_list = ['python', 'run_metgrid.py', '-b', cycle_str, '-s', str(sim_hrs), '-w', wps_ins_dir,
                         '-r', wps_run_dir, '-o', metgrid_dir, '-u', ungrib_dir, '-t', template_dir, '-m', icbc_model,
-                        '-q', scheduler, '-a', hostname]
+                        '-q', scheduler, '-a', hostname, '-n', wps_nml_tmp]
             if hrrr_native:
                 cmd_list.append('-v')
             if use_tavgsfc:

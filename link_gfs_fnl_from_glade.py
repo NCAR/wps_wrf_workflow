@@ -99,7 +99,7 @@ def main(cycle_dt_str, sim_hrs, out_dir_parent, now_time_beg, interval):
         sys.exit(1)
 
     cycle_dt_end = cycle_dt + dt.timedelta(hours=sim_hrs)
-    valid_dt = pd.date_range(start=cycle_dt, end=cycle_dt_end, freq=str(interval) + 'H')
+    valid_dt = pd.date_range(start=cycle_dt, end=cycle_dt_end, freq=str(interval) + 'h')
     n_valid = len(valid_dt)
 
     glade_dir_parent = pathlib.Path('/', 'glade', 'campaign', 'collections', 'rda', 'data', 'd083003')

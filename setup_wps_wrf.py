@@ -104,7 +104,7 @@ def parse_args():
     # If other hostnames in the future need to be simplified similarly, add another elif branch here.
     if hostname[0:-1] == 'derecho':
         hostname = 'derecho'
-    elif hostname[0:-1] == 'casper-login':
+    elif hostname[0:-1] == 'crlogin':
         hostname = 'casper'
 
     with open(args.config) as yaml_f:

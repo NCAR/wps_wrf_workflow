@@ -181,6 +181,10 @@ Main YAML Configuration
      to the queue, without waiting to monitor its status, progress, or success. If
      :code:`run_wrf = False`, then :code:`realtime` has no effect. (Default value: :code:`False`.)
 
+   * :code:`account`: When provided, this HPC account key will be used instead of the
+     account key that is provided in the :code:`submit_*.bash` scripts in the templates
+     directory. If not provided, then the account key line is not overwritten.
+
 All other fields can remain at their default values unless specialized
 cases arise.
 

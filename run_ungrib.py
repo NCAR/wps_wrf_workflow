@@ -20,6 +20,7 @@ import time
 import datetime as dt
 import pandas as pd
 import logging
+import fileinput
 
 from proc_util import exec_command
 from wps_wrf_util import search_file
@@ -57,6 +58,8 @@ def parse_args():
                         help='If flag present, use analysis [f00] files for ICs/LBCs')
     parser.add_argument('-n', '--nml_tmp', default=None,
                         help='string for filename of namelist template (default: namelist.wps.[icbc_model])')
+    parser.add_argument('-k', '--account', default=None,
+                        help='string specifying the account key for HPC charges (default: None)')
 
     args = parser.parse_args()
     cycle_dt_beg = args.cycle_dt_beg
@@ -76,6 +79,7 @@ def parse_args():
     hostname = args.hostname
     hrrr_native = args.hrrr_native
     nml_tmp = args.nml_tmp
+    account = args.account
 
     if len(cycle_dt_beg) != 11 or cycle_dt_beg[8] != '_':
         log.error('ERROR! Incorrect format for argument cycle_dt_beg in call to run_metgrid.py. Exiting!')
@@ -113,7 +117,7 @@ def parse_args():
         sys.exit(1)
 
     return (cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, icbc_source, icbc_model, int_hrs,
-            icbc_fc_dt, scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp)
+            icbc_fc_dt, scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp, account)
 
 
 def check_wps_nml_templates(template_dir: pathlib.Path, nml_list: list):
@@ -140,7 +144,7 @@ def check_wps_nml_templates(template_dir: pathlib.Path, nml_list: list):
 
 
 def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, icbc_source, icbc_model, int_hrs,
-         icbc_fc_dt, scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp):
+         icbc_fc_dt, scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp, account):
 
     log.info(f'Running run_ungrib.py from directory: {curr_dir}')
 
@@ -254,6 +258,27 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
             shutil.copy(temp_dir.joinpath('submit_ungrib.bash.casper'), 'submit_ungrib.bash')
         else:
             shutil.copy(temp_dir.joinpath('submit_ungrib.bash'), 'submit_ungrib.bash')
+
+        # If an account key was supplied in the yaml config file, then overwrite it in the template batch submit script
+        if account is not None:
+            with fileinput.input('submit_ungrib.bash', inplace=True) as f:
+                if scheduler == 'pbs':
+                    for line in f:
+                        if line.strip()[0:7] == '#PBS -A':
+                            new_line = f'#PBS -A {account}\n'
+                            print(line.replace(line, new_line), end='')
+                        else:
+                            print(line, end='')
+                elif scheduler == 'slurm':
+                    for line in f:
+                        if line.strip()[0:10] == '#SBATCH -A':
+                            new_line = f'#SBATCH -A {account}\n'
+                            print(line.replace(line, new_line), end='')
+                        else:
+                            print(line, end='')
+                else:
+                    log.error(f'ERROR: Unknown scheduler option "{scheduler}". Add an elif branch to handle this. Exiting!')
+                    sys.exit(1)
 
         ## Link to the correct Vtable, grib/grib2 files, and copy in a namelist template
         ## (Add other elif options here as needed)
@@ -540,6 +565,28 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
             else:
                 shutil.copy(temp_dir.joinpath('submit_ungrib.bash'), 'submit_ungrib.bash')
 
+            # If an account key was supplied in the yaml config file, then overwrite it in the template batch submit script
+            if account is not None:
+                with fileinput.input('submit_ungrib.bash', inplace=True) as f:
+                    if scheduler == 'pbs':
+                        for line in f:
+                            if line.strip()[0:7] == '#PBS -A':
+                                new_line = f'#PBS -A {account}\n'
+                                print(line.replace(line, new_line), end='')
+                            else:
+                                print(line, end='')
+                    elif scheduler == 'slurm':
+                        for line in f:
+                            if line.strip()[0:10] == '#SBATCH -A':
+                                new_line = f'#SBATCH -A {account}\n'
+                                print(line.replace(line, new_line), end='')
+                            else:
+                                print(line, end='')
+                    else:
+                        log.error(f'ERROR: Unknown scheduler option "{scheduler}". Add an elif branch to handle this. '
+                                  f'Exiting!')
+                        sys.exit(1)
+
             ## Link to the correct Vtable, grib/grib2 files, and copy in a namelist template
             if pathlib.Path('Vtable').is_symlink():
                 pathlib.Path('Vtable').unlink()
@@ -697,9 +744,9 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
 if __name__ == '__main__':
     now_time_beg = dt.datetime.now(dt.UTC)
     (cycle_dt, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, icbc_source, icbc_model, int_hrs, icbc_fc_dt,
-     scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp) = parse_args()
+     scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp, account) = parse_args()
     main(cycle_dt, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, icbc_source, icbc_model, int_hrs, icbc_fc_dt,
-         scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp)
+         scheduler, mem_id, hostname, hrrr_native, icbc_analysis, nml_tmp, account)
     now_time_end = dt.datetime.now(dt.UTC)
     run_time_tot = now_time_end - now_time_beg
     now_time_beg_str = now_time_beg.strftime('%Y-%m-%d %H:%M:%S')

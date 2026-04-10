@@ -70,6 +70,7 @@ def parse_args():
      'do_real':     'flag to run real for this case',
      'do_wrf':      'flag to submit wrf for this case',
      'do_upp':      'flag to perform UPP post-processing to grib2 for this case',
+     'account': 'account key to charge for HPC core hours, overwriting value in submit scripts (default: None)'
      #Add new parameters here
     }
 
@@ -147,6 +148,8 @@ def parse_args():
     params.setdefault('use_geos5_aer_fcst', False)
     params.setdefault('use_geos5_aer_anal', False)
 
+    params.setdefault('account', None)
+
     params['hostname'] = hostname
     params['grib_dir_parent'] = pathlib.Path(params['grib_dir'])
     del params['grib_dir']
@@ -189,7 +192,7 @@ def parse_args():
 
 def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, exp_name, exp_wrf_only, realtime, archive, hostname,
          icbc_model, icbc_source, icbc_analysis, ungrib_domain, grib_dir_parent, wps_ins_dir, wrf_ins_dir, hrrr_native,
-         wps_run_dir_parent, wrf_run_dir_parent, template_dir, arc_dir_parent,
+         wps_run_dir_parent, wrf_run_dir_parent, template_dir, arc_dir_parent, account,
          geos5_int_dir_parent, use_geos5_aer_fcst, use_geos5_aer_anal,
          upp_working_dir, upp_yaml, upp_domains,
          get_icbc, do_geogrid, do_ungrib, do_avg_tsfc, use_tavgsfc, do_metgrid, do_real, do_wrf, do_upp):
@@ -493,13 +496,14 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
 
         if do_geogrid:
             cmd_list = ['python', 'run_geogrid.py', '-w', wps_ins_dir, '-r', geo_run_dir, '-t', template_dir,
-                 '-n', wps_nml_tmp, '-q', scheduler, '-a', hostname]
+                 '-n', wps_nml_tmp, '-q', scheduler, '-a', hostname, '-k', account]
             ret, output = exec_command(cmd_list, log)
 
         if do_ungrib:
             cmd_list = ['python', 'run_ungrib.py', '-b', cycle_str, '-s', str(sim_hrs), '-w', wps_ins_dir,
                         '-r', wps_run_dir, '-o', ungrib_dir, '-t', template_dir, '-m', icbc_model, '-n', wps_nml_tmp,
-                        '-i', str(int_hrs), '-q', scheduler, '-f', str(icbc_fc_dt), '-a', hostname, '-c', icbc_source]
+                        '-i', str(int_hrs), '-q', scheduler, '-f', str(icbc_fc_dt), '-a', hostname, '-c', icbc_source,
+                        '-k', account]
 
             # For some IC/LBC models the gribfiles are stored in date directories, not cycle hour directories
             # So pass in grib_dir_parent instead. run_ungrib.py handles grib_dir for these models differently.
@@ -631,7 +635,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         if do_metgrid:
             cmd_list = ['python', 'run_metgrid.py', '-b', cycle_str, '-s', str(sim_hrs), '-w', wps_ins_dir,
                         '-r', wps_run_dir, '-o', metgrid_dir, '-u', ungrib_dir, '-t', template_dir, '-m', icbc_model,
-                        '-q', scheduler, '-a', hostname, '-n', wps_nml_tmp]
+                        '-q', scheduler, '-a', hostname, '-n', wps_nml_tmp, '-k', account]
             if hrrr_native:
                 cmd_list.append('-v')
             if use_tavgsfc:
@@ -645,7 +649,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         if do_real:
             cmd_list = ['python', 'run_real.py', '-b', cycle_str, '-s', str(sim_hrs), '-w', wrf_ins_dir,
                      '-r', wrf_run_dir, '-m', metgrid_dir, '-t', template_dir, '-i', icbc_model, '-n', wrf_nml_tmp,
-                     '-q', scheduler, '-a', hostname]
+                     '-q', scheduler, '-a', hostname, '-k', account]
             if exp_name is not None:
                 cmd_list.append('-x')
                 cmd_list.append(exp_name)
@@ -654,7 +658,7 @@ def main(cycle_dt_str_beg, cycle_dt_str_end, cycle_int_h, sim_hrs, icbc_fc_dt, e
         if do_wrf:
             cmd_list = ['python', 'run_wrf.py', '-b', cycle_str, '-s', str(sim_hrs), '-w', wrf_ins_dir,
                         '-r', wrf_run_dir, '-t', template_dir, '-i', icbc_model, '-n', wrf_nml_tmp,
-                        '-q', scheduler, '-a', hostname]
+                        '-q', scheduler, '-a', hostname, '-k', account]
             if exp_name is not None:
                 cmd_list.append('-x')
                 cmd_list.append(exp_name)

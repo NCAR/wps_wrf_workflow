@@ -19,6 +19,7 @@ import time
 import datetime as dt
 import pandas as pd
 import logging
+import fileinput
 
 from proc_util import exec_command
 from wps_wrf_util import search_file
@@ -47,6 +48,8 @@ def parse_args():
     parser.add_argument('-m', '--monitor_wrf', help='flag to keep the script active as long as wrf.exe is submitted/running on the cluster (True if flag present, False if not present)', action='store_true')
     parser.add_argument('-q', '--scheduler', default='pbs', help='string specifying the cluster job scheduler (default: pbs)')
     parser.add_argument('-a', '--hostname', default='derecho', help='string specifying the hostname (default: derecho')
+    parser.add_argument('-k', '--account', default=None,
+                        help='string specifying the account key for HPC charges (default: None)')
 
     args = parser.parse_args()
     cycle_dt_beg = args.cycle_dt_beg
@@ -59,6 +62,7 @@ def parse_args():
     nml_tmp = args.nml_tmp
     scheduler = args.scheduler
     hostname = args.hostname
+    account = args.account
 
     if len(cycle_dt_beg) != 11 or cycle_dt_beg[8] != '_':
         log.error('ERROR! Incorrect format for argument cycle_dt_beg in call to run_real.py. Exiting!')
@@ -94,9 +98,11 @@ def parse_args():
     if args.monitor_wrf:
         monitor_wrf = True
 
-    return cycle_dt_beg, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name, nml_tmp, monitor_wrf, scheduler, hostname
+    return (cycle_dt_beg, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name, nml_tmp, monitor_wrf, scheduler,
+            hostname, account)
 
-def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name, nml_tmp, monitor_wrf, scheduler, hostname):
+def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name, nml_tmp, monitor_wrf, scheduler,
+         hostname, account):
 
     log.info(f'Running run_wrf.py from directory: {curr_dir}')
 
@@ -145,6 +151,27 @@ def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name,
         shutil.copy(tmp_dir.joinpath('submit_wrf.bash.casper'), 'submit_wrf.bash')
     else:
         shutil.copy(tmp_dir.joinpath('submit_wrf.bash'), 'submit_wrf.bash')
+
+    # If an account key was supplied in the yaml config file, then overwrite it in the template batch submit script
+    if account is not None:
+        with fileinput.input('submit_wrf.bash', inplace=True) as f:
+            if scheduler == 'pbs':
+                for line in f:
+                    if line.strip()[0:7] == '#PBS -A':
+                        new_line = f'#PBS -A {account}\n'
+                        print(line.replace(line, new_line), end='')
+                    else:
+                        print(line, end='')
+            elif scheduler == 'slurm':
+                for line in f:
+                    if line.strip()[0:10] == '#SBATCH -A':
+                        new_line = f'#SBATCH -A {account}\n'
+                        print(line.replace(line, new_line), end='')
+                    else:
+                        print(line, end='')
+            else:
+                log.error(f'ERROR: Unknown scheduler option "{scheduler}". Add an elif branch to handle this. Exiting!')
+                sys.exit(1)
 
     ## Copy over the default namelist
     shutil.copy(tmp_dir.joinpath(nml_tmp), 'namelist.input.template')
@@ -312,8 +339,10 @@ def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name,
 
 if __name__ == '__main__':
     now_time_beg = dt.datetime.now(dt.UTC)
-    cycle_dt, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name, nml_tmp, monitor_wrf, scheduler, hostname = parse_args()
-    main(cycle_dt, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name, nml_tmp, monitor_wrf, scheduler, hostname)
+    (cycle_dt, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name, nml_tmp, monitor_wrf, scheduler, hostname,
+     account) = parse_args()
+    main(cycle_dt, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name, nml_tmp, monitor_wrf, scheduler,
+         hostname, account)
     now_time_end = dt.datetime.now(dt.UTC)
     run_time_tot = now_time_end - now_time_beg
     now_time_beg_str = now_time_beg.strftime('%Y-%m-%d %H:%M:%S')

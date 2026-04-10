@@ -672,7 +672,8 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
                     # Add other error message patterns to search for if needed
                     fnames = ['ungrib.log', 'ungrib.e' + jobid_list[tt], 'ungrib.o' + jobid_list[tt],
                               'log_ungrib.e' + jobid_list[tt], 'log_ungrib.o' + jobid_list[tt]]
-                    patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option']
+                    patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option',
+                                'Permission denied', 'MPI_ABORT']
                     for fname in fnames:
                         if ungrib_dir.joinpath(fname).is_file():
                             for pattern in patterns:

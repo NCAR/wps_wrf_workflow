@@ -245,7 +245,8 @@ def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, metgrid_dir, tmp_dir, icbc_mod
             else:
                 ## Loop through the rsl.error.* files to look for fatal errors
                 # May need to add other error message patterns to search for
-                patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option']
+                patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option',
+                            'Permission denied', 'MPI_ABORT']
                 for fname in glob.glob('rsl.error.*'):
                     for pattern in patterns:
                         if search_file(str(run_dir) + '/' + fname, pattern):

@@ -161,7 +161,8 @@ def main(wps_dir, run_dir, tmp_dir, nml_tmp, scheduler, hostname):
 		else:
 			# May need to add more error message patterns to search for
 			fnames = ['geogrid.log.0000', job_log_filename, job_err_filename]
-			patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option']
+			patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option',
+						'Permission denied', 'MPI_ABORT']
 			for fname in fnames:
 				if run_dir.joinpath(fname).is_file():
 					for pattern in patterns:

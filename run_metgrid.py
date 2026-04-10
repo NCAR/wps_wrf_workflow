@@ -294,7 +294,8 @@ def main(cycle_dt_beg, sim_hrs, wps_dir, run_dir, out_dir, ungrib_dir, tmp_dir, 
         else:
             # May need to add more error message patterns to search for
             fnames = ['metgrid.log.0000', job_log_filename, job_err_filename]
-            patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option']
+            patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option',
+                        'Permission denied', 'MPI_ABORT']
             for fname in fnames:
                 if run_dir.joinpath(fname).is_file():
                     for pattern in patterns:

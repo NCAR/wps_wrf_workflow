@@ -419,6 +419,8 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
         files = glob.glob('log_ungrib.e[0-9]*')
         for file in files:
             ret, output = exec_command(['rm', file], log, exit_on_fail=False, verbose=False)
+        ret, output = exec_command(['rm', 'UNGRIB_BEG'], log, False, False)
+        ret, output = exec_command(['rm', 'UNGRIB_END'], log, False, False)
 
         # Submit ungrib and get the job ID as a string in case it's useful
         # Set wait=True to force subprocess.run to wait for stdout echoed from the job scheduler
@@ -464,6 +466,12 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
         while not status:
             if not pathlib.Path('ungrib.log').is_file():
                 time.sleep(long_time)
+
+                # Has the job ended without creating a log file?
+                if pathlib.Path('UNGRIB_END').is_file() and not pathlib.Path('ungrib.log').is_file():
+                    log.error('ERROR: ungrib.exe failed.')
+                    log.error(f'Consult {run_dir}/ungrib.o{jobid} for potential error messages.')
+                    sys.exit(1)
             else:
                 status = True
         ## Second, look for success/error messages in the log file
@@ -475,7 +483,9 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
                 # May need to add more error message patterns to search for
                 fnames = ['ungrib.log', 'ungrib.e' + jobid_list[tt], 'ungrib.o' + jobid_list[tt],
                           'log_ungrib.e' + jobid_list[tt], 'log_ungrib.o' + jobid_list[tt]]
-                patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option']
+                patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option',
+                            'Permission denied', 'MPI_ABORT', 'Bus error', 'core dump', 'mem limit exceeded', 'Killed',
+                            'command not found']
                 for fname in fnames:
                     if ungrib_dir.joinpath(fname).is_file():
                         for pattern in patterns:
@@ -664,6 +674,8 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
             files = glob.glob('log_ungrib.e[0-9]*')
             for file in files:
                 ret, output = exec_command(['rm', file], log, False, False)
+            ret, output = exec_command(['rm', 'UNGRIB_BEG'], log, False, False)
+            ret, output = exec_command(['rm', 'UNGRIB_END'], log, False, False)
 
             # Submit ungrib and get the job ID as a string in case it's useful
             # Set wait=True to force subprocess.run to wait for stdout echoed from the job scheduler
@@ -708,6 +720,12 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
             while not status:
                 if not pathlib.Path('ungrib.log').is_file():
                     time.sleep(long_time)
+
+                    # Has the job ended without creating a log file?
+                    if pathlib.Path('UNGRIB_END').is_file() and not pathlib.Path('ungrib.log').is_file():
+                        log.error('ERROR: ungrib.exe failed.')
+                        log.error(f'Consult {run_dir}/ungrib.o{jobid} for potential error messages.')
+                        sys.exit(1)
                 else:
                     status = True
             ## Second, look for success/error messages in the log file
@@ -720,7 +738,8 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
                     fnames = ['ungrib.log', 'ungrib.e' + jobid_list[tt], 'ungrib.o' + jobid_list[tt],
                               'log_ungrib.e' + jobid_list[tt], 'log_ungrib.o' + jobid_list[tt]]
                     patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option',
-                                'Permission denied', 'MPI_ABORT']
+                                'Permission denied', 'MPI_ABORT', 'Bus error', 'core dump', 'mem limit exceeded',
+                                'Killed', 'command not found']
                     for fname in fnames:
                         if ungrib_dir.joinpath(fname).is_file():
                             for pattern in patterns:

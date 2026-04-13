@@ -263,6 +263,8 @@ def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name,
     files = glob.glob('wrf.o*')
     for file in files:
         ret,output = exec_command(['rm',file], log, False, False)
+    ret,output = exec_command(['rm','WRF_BEG'], log, False, False)
+    ret,output = exec_command(['rm','WRF_END'], log, False, False)
 
     # Submit wrf and get the job ID as a string
     # Set wait=True to force subprocess.run to wait for stdout echoed from the job scheduler
@@ -296,6 +298,12 @@ def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name,
         while not status:
             if not pathlib.Path('rsl.out.0000').is_file():
                 time.sleep(long_time)
+
+                # Has the job ended without creating an rsl file?
+                if pathlib.Path('WRF_END').is_file() and not pathlib.Path('rsl.out.0000').is_file():
+                    log.error('ERROR: wrf.exe failed.')
+                    log.error(f'Consult {run_dir}/wrf.o{jobid} for potential error messages.')
+                    sys.exit(1)
             else:
                 log.info('wrf is now running on the cluster . . .')
                 status = True
@@ -313,7 +321,8 @@ def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name,
                     ## Loop through the rsl.error.* files to look for fatal errors
                     # May need to add other error message patterns to search for
                     patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option',
-                                'Permission denied', 'MPI_ABORT']
+                                'Permission denied', 'MPI_ABORT', 'Bus error', 'core dump', 'mem limit exceeded',
+                                'Killed', 'command not found']
                     rslerr = 'rsl.error.*'
                     for fname in glob.glob(rslerr):
                         for pattern in patterns:
@@ -329,6 +338,15 @@ def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, tmp_dir, icbc_model, exp_name,
                             if search_file(str(run_dir) + '/' + fname, pattern):
                                 log.error('ERROR: wrf.exe failed.')
                                 log.error('Consult ' + str(run_dir) + '/' + fname + ' for potential error messages.')
+                                log.error('Exiting!')
+                                sys.exit(1)
+
+                    fname = f'wrf.o{jobid}'
+                    if run_dir.joinpath(fname).is_file():
+                        for pattern in patterns:
+                            if search_file(f'{run_dir}/{fname}', pattern):
+                                log.error('ERROR: wrf.exe failed.')
+                                log.error(f'Consult {run_dir}/{fname} for potential error messages.')
                                 log.error('Exiting!')
                                 sys.exit(1)
 

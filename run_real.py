@@ -229,6 +229,8 @@ def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, metgrid_dir, tmp_dir, icbc_mod
     files = glob.glob('real.o*')
     for file in files:
         ret,output = exec_command(['rm',file], log, False, False)
+    ret,output = exec_command(['rm', 'REAL_BEG'], log, False, False)
+    ret,output = exec_command(['rm', 'REAL_END'], log, False, False)
 
     # Submit real and get the job ID as a string
     # Set wait=True to force subprocess.run to wait for stdout echoed from the job scheduler
@@ -256,6 +258,12 @@ def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, metgrid_dir, tmp_dir, icbc_mod
     while not status:
         if not pathlib.Path('rsl.out.0000').is_file():
             time.sleep(long_time)
+
+            # Has the job ended without creating an rsl file?
+            if pathlib.Path('REAL_END').is_file() and not pathlib.Path('rsl.out.0000').is_file():
+                log.error('ERROR: real.exe failed.')
+                log.error(f'Consult {run_dir}/real.o{jobid} for potential error messages.')
+                sys.exit(1)
         else:
             log.info('real is now running on the cluster . . .')
             status = True
@@ -273,7 +281,8 @@ def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, metgrid_dir, tmp_dir, icbc_mod
                 ## Loop through the rsl.error.* files to look for fatal errors
                 # May need to add other error message patterns to search for
                 patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option',
-                            'Permission denied', 'MPI_ABORT']
+                            'Permission denied', 'MPI_ABORT', 'Bus error', 'core dump', 'mem limit exceeded', 'Killed',
+                            'command not found']
                 for fname in glob.glob('rsl.error.*'):
                     for pattern in patterns:
                         if search_file(str(run_dir) + '/' + fname, pattern):
@@ -288,6 +297,15 @@ def main(cycle_dt_beg, sim_hrs, wrf_dir, run_dir, metgrid_dir, tmp_dir, icbc_mod
                         if search_file(str(run_dir) + '/' + fname, pattern):
                             log.error('ERROR: real.exe failed.')
                             log.error('Consult ' + str(run_dir) + '/' + fname + ' for potential error messages.')
+                            log.error('Exiting!')
+                            sys.exit(1)
+
+                fname = f'real.o{jobid}'
+                if run_dir.joinpath(fname).is_file():
+                    for pattern in patterns:
+                        if search_file(f'{run_dir}/{fname}', pattern):
+                            log.error('ERROR: real.exe failed.')
+                            log.error(f'Consult {run_dir}/{fname} for potential error messages.')
                             log.error('Exiting!')
                             sys.exit(1)
 

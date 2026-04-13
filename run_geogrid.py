@@ -147,6 +147,8 @@ def main(wps_dir, run_dir, tmp_dir, nml_tmp, scheduler, hostname, account):
 	files = glob.glob('log_geogrid.o[0-9]*')
 	for file in files:
 		ret, output = exec_command(['rm', file], log, False, False)
+	ret, output = exec_command(['rm', 'GEOGRID_BEG'], log, False, False)
+	ret, output = exec_command(['rm', 'GEOGRID_END'], log, False, False)
 
 	# Submit geogrid and get the job ID as a string
 	# Set wait=True to force subprocess.run to wait for stdout echoed from the job scheduler
@@ -173,6 +175,12 @@ def main(wps_dir, run_dir, tmp_dir, nml_tmp, scheduler, hostname, account):
 	while not status:
 		if not pathlib.Path('geogrid.log.0000').is_file() and not pathlib.Path('log_geogrid.o'+jobid).is_file():
 			time.sleep(long_time)
+
+		# Has the job ended without creating a log file?
+		if pathlib.Path('GEOGRID_END').is_file() and not pathlib.Path('geogrid.log.0000').is_file():
+			log.error('ERROR: geogrid.exe failed.')
+			log.error(f'Consult {run_dir}/geogrid.o{jobid} for potential error messages.')
+			sys.exit(1)
 		else:
 			log.info('geogrid is now running on the cluster . . .')
 			status = True
@@ -186,7 +194,8 @@ def main(wps_dir, run_dir, tmp_dir, nml_tmp, scheduler, hostname, account):
 			# May need to add more error message patterns to search for
 			fnames = ['geogrid.log.0000', job_log_filename, job_err_filename]
 			patterns = ['FATAL', 'Fatal', 'ERROR', 'Error', 'BAD TERMINATION', 'forrtl:', 'unrecognized option',
-						'Permission denied', 'MPI_ABORT']
+						'Permission denied', 'MPI_ABORT', 'Bus error', 'core dump', 'mem limit exceeded', 'Killed',
+						'command not found']
 			for fname in fnames:
 				if run_dir.joinpath(fname).is_file():
 					for pattern in patterns:

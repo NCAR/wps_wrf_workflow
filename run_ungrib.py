@@ -470,7 +470,11 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
                 # Has the job ended without creating a log file?
                 if pathlib.Path('UNGRIB_END').is_file() and not pathlib.Path('ungrib.log').is_file():
                     log.error('ERROR: ungrib.exe failed.')
-                    log.error(f'Consult {run_dir}/ungrib.o{jobid} for potential error messages.')
+                    log.error(f'Consult {run_dir}/ungrib.o{jobid_list[tt]} for potential error messages.')
+                    sys.exit(1)
+                elif pathlib.Path(f'ungrib.e{jobid_list[tt]}').is_file() and not pathlib.Path('ungrib.log').is_file():
+                    log.error('ERROR: ungrib.exe failed.')
+                    log.error(f'Consult {run_dir}/ungrib.e{jobid_list[tt]} for potential error messages.')
                     sys.exit(1)
             else:
                 status = True
@@ -724,7 +728,11 @@ def main(cycle_dt_str, sim_hrs, wps_dir, run_dir, out_dir, grib_dir, temp_dir, i
                     # Has the job ended without creating a log file?
                     if pathlib.Path('UNGRIB_END').is_file() and not pathlib.Path('ungrib.log').is_file():
                         log.error('ERROR: ungrib.exe failed.')
-                        log.error(f'Consult {run_dir}/ungrib.o{jobid} for potential error messages.')
+                        log.error(f'Consult {run_dir}/ungrib.o{jobid_list[tt]} for potential error messages.')
+                        sys.exit(1)
+                    elif pathlib.Path(f'ungrib.e{jobid_list[tt]}').is_file() and not pathlib.Path('ungrib.log').is_file():
+                        log.error('ERROR: ungrib.exe failed.')
+                        log.error(f'Consult {run_dir}/ungrib.e{jobid_list[tt]} for potential error messages.')
                         sys.exit(1)
                 else:
                     status = True

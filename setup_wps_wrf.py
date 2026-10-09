@@ -70,7 +70,8 @@ def parse_args():
      'do_real':     'flag to run real for this case',
      'do_wrf':      'flag to submit wrf for this case',
      'do_upp':      'flag to perform UPP post-processing to grib2 for this case',
-     'account': 'account key to charge for HPC core hours, overwriting value in submit scripts (default: None)'
+     'account': 'account key to charge for HPC core hours, overwriting value in submit scripts (default: None)',
+     'hostname': 'derecho or casper, overriding the detected hostname so the workflow can run inside a batch job (default: detected login-node hostname)'
      #Add new parameters here
     }
 
@@ -150,7 +151,7 @@ def parse_args():
 
     params.setdefault('account', None)
 
-    params['hostname'] = hostname
+    params['hostname'] = params.get('hostname') or hostname
     params['grib_dir_parent'] = pathlib.Path(params['grib_dir'])
     del params['grib_dir']
     params['icbc_source'] = params['icbc_source']
